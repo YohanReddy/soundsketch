@@ -1,110 +1,121 @@
-'use client'
+"use client";
 
-import React, { useState } from 'react'
-import { useReactMediaRecorder } from 'react-media-recorder'
-import { Mic, StopCircle, Image, Redo } from 'lucide-react'
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import React, { useState, useEffect } from "react";
+import { useReactMediaRecorder } from "react-media-recorder";
+import { Mic, StopCircle, Image, Redo } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function VoiceToImageGeneratorComponent() {
-  const [isRecording, setIsRecording] = useState(false)
-  const [generatedImage, setGeneratedImage] = useState('')
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [generatedPrompt, setGeneratedPrompt] = useState('')
-  const [editablePrompt, setEditablePrompt] = useState('')
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [isRecording, setIsRecording] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedPrompt, setGeneratedPrompt] = useState("");
+  const [editablePrompt, setEditablePrompt] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const { startRecording, stopRecording, mediaBlobUrl } = useReactMediaRecorder({ audio: true })
+  // Prevent SSR issues by only enabling media recording in the browser
+  const { startRecording, stopRecording, mediaBlobUrl } =
+    typeof window !== "undefined"
+      ? useReactMediaRecorder({ audio: true })
+      : {
+          startRecording: () => {},
+          stopRecording: () => {},
+          mediaBlobUrl: null,
+        };
 
   const handleStartRecording = () => {
-    setIsRecording(true)
-    startRecording()
-  }
+    setIsRecording(true);
+    startRecording();
+  };
 
   const handleStopRecording = async () => {
-    setIsRecording(false)
-    stopRecording()
-    setIsProcessing(true)
-    setError(null)
+    setIsRecording(false);
+    stopRecording();
+    setIsProcessing(true);
+    setError(null);
 
     try {
-      // Wait for the mediaBlobUrl to be available
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      if (!mediaBlobUrl) {
-        throw new Error('No audio recording available')
-      }
+      if (!mediaBlobUrl) throw new Error("No audio recording available");
 
-      const audioBlob = await fetch(mediaBlobUrl).then(r => r.blob())
-      const formData = new FormData()
-      formData.append('audio', audioBlob, 'recording.webm')
+      const audioBlob = await fetch(mediaBlobUrl).then((r) => r.blob());
+      const formData = new FormData();
+      formData.append("audio", audioBlob, "recording.webm");
 
-      // Step 1: Transcribe audio
-      const transcribeResponse = await fetch('/api/transcribe', {
-        method: 'POST',
-        body: formData,
-      })
-      if (!transcribeResponse.ok) {
-        const errorData = await transcribeResponse.json()
-        throw new Error(errorData.error || 'Failed to transcribe audio')
-      }
-      const { transcript } = await transcribeResponse.json()
+      const transcript = await fetchTranscript(formData);
+      const prompt = await fetchPrompt(transcript);
 
-      // Step 2: Generate prompt
-      const promptResponse = await fetch('/api/generate-prompt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript }),
-      })
-      if (!promptResponse.ok) {
-        const errorData = await promptResponse.json()
-        throw new Error(errorData.error || 'Failed to generate prompt')
-      }
-      const { prompt } = await promptResponse.json()
-
-      setGeneratedPrompt(prompt)
-      setEditablePrompt(prompt)
-    } catch (error) {
-      console.error('Error processing audio:', error)
-      setError(error instanceof Error ? error.message : 'An unknown error occurred')
+      setGeneratedPrompt(prompt);
+      setEditablePrompt(prompt);
+    } catch (err) {
+      handleError(err);
     } finally {
-      setIsProcessing(false)
+      setIsProcessing(false);
     }
-  }
+  };
 
-  const handlePromptEdit = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditablePrompt(e.target.value)
-  }
+  const fetchTranscript = async (formData: FormData) => {
+    const res = await fetch("/api/transcribe", {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok)
+      throw new Error((await res.json()).error || "Failed to transcribe audio");
+    const { transcript } = await res.json();
+    return transcript;
+  };
+
+  const fetchPrompt = async (transcript: string) => {
+    const res = await fetch("/api/generate-prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ transcript }),
+    });
+    if (!res.ok)
+      throw new Error((await res.json()).error || "Failed to generate prompt");
+    const { prompt } = await res.json();
+    return prompt;
+  };
+
+  const handleError = (err: unknown) => {
+    console.error("Error:", err);
+    setError(err instanceof Error ? err.message : "An unknown error occurred");
+  };
 
   const handleRegenerate = async () => {
-    setIsGenerating(true)
-    setError(null)
+    setIsGenerating(true);
+    setError(null);
     try {
-      const response = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: editablePrompt }),
-      })
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate image')
-      }
-      const { imageUrl } = await response.json()
-      setGeneratedImage(imageUrl)
-    } catch (error) {
-      console.error('Error generating image:', error)
-      setError(error instanceof Error ? error.message : 'An unknown error occurred')
+      });
+      if (!res.ok)
+        throw new Error((await res.json()).error || "Failed to generate image");
+      const { imageUrl } = await res.json();
+      setGeneratedImage(imageUrl);
+    } catch (err) {
+      handleError(err);
     } finally {
-      setIsGenerating(false)
+      setIsGenerating(false);
     }
-  }
+  };
+
+  const handlePromptEdit = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setEditablePrompt(e.target.value);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
       <Card className="w-full max-w-md bg-white/90 backdrop-blur-sm">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">Voice to Image Generator</CardTitle>
+          <CardTitle className="text-2xl font-bold text-center">
+            Voice to Image Generator
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex justify-center">
@@ -129,23 +140,31 @@ export default function VoiceToImageGeneratorComponent() {
             )}
           </div>
           <p className="text-center">
-            {isRecording ? "Recording... Tap to stop" : "Tap the microphone to start recording"}
+            {isRecording
+              ? "Recording... Tap to stop"
+              : "Tap the microphone to start recording"}
           </p>
+
           {isProcessing && (
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
               <p className="mt-2">Processing audio...</p>
             </div>
           )}
+
           {error && (
             <div className="p-4 bg-red-100 text-red-700 rounded-lg">
               <p>{error}</p>
             </div>
           )}
+
           {generatedPrompt && !isGenerating && (
             <div className="space-y-4">
               <div className="p-4 bg-gray-100 rounded-lg">
-                <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="prompt"
+                  className="block text-sm font-medium text-gray-700 mb-2"
+                >
                   Generated Prompt (you can edit):
                 </label>
                 <textarea
@@ -157,30 +176,36 @@ export default function VoiceToImageGeneratorComponent() {
                 />
               </div>
               <div className="flex justify-center">
-                <Button onClick={handleRegenerate} className="flex items-center space-x-2">
+                <Button
+                  onClick={handleRegenerate}
+                  className="flex items-center space-x-2"
+                >
                   <Image className="h-4 w-4" />
                   <span>Generate Art</span>
                 </Button>
               </div>
             </div>
           )}
+
           {generatedImage && !isGenerating && (
             <div className="space-y-4">
-              <div className="relative">
-                <img src={generatedImage} alt="Generated image" className="w-full rounded-lg" />
-              </div>
-              <div className="p-4 bg-gray-100 rounded-lg">
-                <p className="text-sm font-medium">Current Prompt:</p>
-                <p className="text-sm">{editablePrompt}</p>
-              </div>
+              <img
+                src={generatedImage}
+                alt="Generated image"
+                className="w-full rounded-lg"
+              />
               <div className="flex justify-center">
-                <Button onClick={handleRegenerate} className="flex items-center space-x-2">
+                <Button
+                  onClick={handleRegenerate}
+                  className="flex items-center space-x-2"
+                >
                   <Redo className="h-4 w-4" />
                   <span>Regenerate</span>
                 </Button>
               </div>
             </div>
           )}
+
           {isGenerating && (
             <div className="flex flex-col items-center">
               <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
@@ -190,5 +215,5 @@ export default function VoiceToImageGeneratorComponent() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
