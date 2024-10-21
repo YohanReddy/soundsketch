@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
 import { Mic, StopCircle, Image as ImageIcon, Redo } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,6 @@ export default function VoiceToImageGeneratorComponent() {
   const [editablePrompt, setEditablePrompt] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isBrowser, setIsBrowser] = useState(false);
-
-  // Ensure hooks run safely in the browser
-  useEffect(() => {
-    setIsBrowser(typeof window !== "undefined");
-  }, []);
 
   const { startRecording, stopRecording, mediaBlobUrl } = useReactMediaRecorder(
     {
@@ -65,8 +59,9 @@ export default function VoiceToImageGeneratorComponent() {
       method: "POST",
       body: formData,
     });
-    if (!res.ok)
+    if (!res.ok) {
       throw new Error((await res.json()).error || "Failed to transcribe audio");
+    }
     const { transcript } = await res.json();
     return transcript;
   };
@@ -77,8 +72,9 @@ export default function VoiceToImageGeneratorComponent() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ transcript }),
     });
-    if (!res.ok)
+    if (!res.ok) {
       throw new Error((await res.json()).error || "Failed to generate prompt");
+    }
     const { prompt } = await res.json();
     return prompt;
   };
@@ -97,8 +93,9 @@ export default function VoiceToImageGeneratorComponent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: editablePrompt }),
       });
-      if (!res.ok)
+      if (!res.ok) {
         throw new Error((await res.json()).error || "Failed to generate image");
+      }
       const { imageUrl } = await res.json();
       setGeneratedImage(imageUrl);
     } catch (err) {
