@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { useReactMediaRecorder } from "react-media-recorder";
-import { Mic, StopCircle, Image, Redo } from "lucide-react";
+import { Mic, StopCircle, Image as ImageIcon, Redo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Image from "next/image";
 
 export default function VoiceToImageGeneratorComponent() {
   const [isRecording, setIsRecording] = useState(false);
@@ -14,16 +15,18 @@ export default function VoiceToImageGeneratorComponent() {
   const [editablePrompt, setEditablePrompt] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isBrowser, setIsBrowser] = useState(false);
 
-  // Prevent SSR issues by only enabling media recording in the browser
-  const { startRecording, stopRecording, mediaBlobUrl } =
-    typeof window !== "undefined"
-      ? useReactMediaRecorder({ audio: true })
-      : {
-          startRecording: () => {},
-          stopRecording: () => {},
-          mediaBlobUrl: null,
-        };
+  // Ensure hooks run safely in the browser
+  useEffect(() => {
+    setIsBrowser(typeof window !== "undefined");
+  }, []);
+
+  const { startRecording, stopRecording, mediaBlobUrl } = useReactMediaRecorder(
+    {
+      audio: true,
+    }
+  );
 
   const handleStartRecording = () => {
     setIsRecording(true);
@@ -180,7 +183,7 @@ export default function VoiceToImageGeneratorComponent() {
                   onClick={handleRegenerate}
                   className="flex items-center space-x-2"
                 >
-                  <Image className="h-4 w-4" />
+                  <ImageIcon className="h-4 w-4" />
                   <span>Generate Art</span>
                 </Button>
               </div>
@@ -189,9 +192,11 @@ export default function VoiceToImageGeneratorComponent() {
 
           {generatedImage && !isGenerating && (
             <div className="space-y-4">
-              <img
+              <Image
                 src={generatedImage}
                 alt="Generated image"
+                width={500}
+                height={500}
                 className="w-full rounded-lg"
               />
               <div className="flex justify-center">
